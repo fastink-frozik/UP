@@ -47,7 +47,8 @@ def izmenit_status(tree):
     okno_roli.geometry("250x150")
     tk.Label(okno_roli, text="Новый статус:").pack(pady=10)
     peremennaya_roli = tk.StringVar(value="Статус")
-    spisok_rolej = ttk.Combobox(okno_roli, textvariable=peremennaya_roli, values=["ожидание", "отказ", "принятие"], state="readonly")
+    spisok_rolej = ttk.Combobox(okno_roli, textvariable=peremennaya_roli, values=["отказ", "принятие"],
+                                state="readonly")
     spisok_rolej.pack(pady=10)
 
     def sohranit_status():
@@ -59,6 +60,7 @@ def izmenit_status(tree):
         conn.close()
         okno_roli.destroy()
         obnovit_order(tree)
+
     tk.Button(okno_roli, text="Сохранить", command=sohranit_status).pack(pady=10)
 
 
@@ -76,6 +78,11 @@ def izmenit_roli(tree):
     vybrannoe = tree.selection()
     if not vybrannoe:
         mb.showwarning("Внимание", "Выберите пользователя")
+        return
+
+    id_user = tree.item(vybrannoe[0])['values'][0]
+    if id_user == user_id:
+        mb.showwarning("Внимание", "Нельзя менять свой вид")
         return
     id_polzovatelya = tree.item(vybrannoe[0])['values'][0]
     okno_roli = tk.Toplevel()
@@ -95,6 +102,7 @@ def izmenit_roli(tree):
         conn.close()
         okno_roli.destroy()
         obnovit_roli(tree)
+
     tk.Button(okno_roli, text="Сохранить", command=sohranit_roli).pack(pady=10)
 
 
@@ -109,7 +117,6 @@ def delit_user(tree):
 
     user_id = tree.item(selected[0])['values'][0]
     user_name = tree.item(selected[0])['values'][1]
-
 
     conn = sqlite3.connect('magaz.db')
     cursor = conn.cursor()
@@ -153,32 +160,131 @@ def regist():
     reg.mainloop()
 
 
-def orderes():
-    orderes_window = tk.Tk()
-    orderes_window.title("Магазин игр Доски & кубики")
-    orderes_window.geometry("250x400")
-    frame = ttk.Frame(orderes_window, padding="20")
+def info_order(tree, orderes_window):
+    selected = tree.selection()
+    if not selected:
+        mb.showwarning("Внимание", "Выберите заказ для просмотра")
+        return
+
+    order_id = tree.item(selected[0])['values'][0]
+
+    info_window = tk.Toplevel(orderes_window)
+    info_window.title(f"Заказ №{order_id}")
+    info_window.geometry("600x400")
+    frame = ttk.Frame(info_window, padding="20")
     frame.pack(fill=tk.BOTH, expand=True)
+
     conn = sqlite3.connect('magaz.db')
     cursor = conn.cursor()
-    columns = ('id_order', 'DATA', 'status', 'user_id')
+
+    cursor.execute("""
+        SELECT lo.id_order, lo.DATA, lo.status, u.log 
+        FROM list_order lo
+        JOIN user u ON lo.user_id = u.user_id
+        WHERE lo.id_order = ?
+    """, (order_id,))
+    order_info = cursor.fetchone()
+
+    if order_info:
+        info_text = f"Заказ №{order_info[0]} | Дата: {order_info[1]} | Статус: {order_info[2]} | Пользователь: {order_info[3]}"
+        title_label = tk.Label(frame, text=info_text, font=("Arial", 10, "bold"))
+        title_label.pack(pady=10)
+
+    columns = ('id', 'Name', 'opisanie', 'price')
+    tree_items = ttk.Treeview(frame, columns=columns, show="headings", height=15)
+    tree_items.pack(fill=tk.BOTH, expand=True, pady=10)
+
+    tree_items.heading("id", text="ID игры")
+    tree_items.heading("Name", text="Наименование")
+    tree_items.heading("opisanie", text="Описание")
+    tree_items.heading("price", text="Цена")
+
+    tree_items.column("#1", width=50)
+    tree_items.column("#2", width=150)
+    tree_items.column("#3", width=300)
+    tree_items.column("#4", width=80)
+
+    cursor.execute("""
+        SELECT Igri.id, Igri.Name, Igri.opisanie, Igri.price 
+        FROM korzina 
+        JOIN Igri ON korzina.id = Igri.id 
+        WHERE korzina.id_order = ?
+    """, (order_id,))
+
+    games = cursor.fetchall()
+    total_price = 0
+
+    for game in games:
+        tree_items.insert("", tk.END, values=game)
+        if game[3]:
+            total_price += game[3]
+
+    if not games:
+        empty_label = tk.Label(frame, text="В этом заказе нет игр", font=("Arial", 12), fg="gray")
+        empty_label.pack(pady=50)
+    else:
+        total_label = tk.Label(frame, text=f"Общая сумма заказа: {total_price} руб.",
+                               font=("Arial", 12, "bold"))
+        total_label.pack(pady=5)
+
+    close_btn = tk.Button(frame, text="Закрыть", command=info_window.destroy, bg="gray", fg="white")
+    close_btn.pack(pady=10)
+
+    conn.close()
+
+
+def orderes():
+    orderes_window = tk.Toplevel()
+    orderes_window.title("Управление заказами")
+    orderes_window.geometry("600x400")
+    frame = ttk.Frame(orderes_window, padding="20")
+    frame.pack(fill=tk.BOTH, expand=True)
+
+    conn = sqlite3.connect('magaz.db')
+    cursor = conn.cursor()
+
+    columns = ('id_order', 'DATA', 'status', 'user_id', 'user_log')
     tree = ttk.Treeview(frame, columns=columns, show="headings")
-    tree.place(x=0, y=5)
+    tree.pack(fill=tk.BOTH, expand=True)
+
     tree.heading("id_order", text="Айди заказа")
     tree.heading("DATA", text="Дата")
     tree.heading("status", text="Статус")
-    tree.heading("user_id", text="Логин")
+    tree.heading("user_id", text="Айди пользователя")
+    tree.heading("user_log", text="Логин")
 
-    tree.column("#1", stretch=NO, width=50)
-    tree.column("#2", stretch=NO, width=50)
-    tree.column("#3", stretch=NO, width=60)
-    tree.column("#4", stretch=NO, width=50)
-    for valuse in cursor.execute("""SELECT * FROM order_view """):
-        tree.insert("", END, values=valuse)
+    tree.column("#1", width=70)
+    tree.column("#2", width=80)
+    tree.column("#3", width=100)
+    tree.column("#4", width=100)
+    tree.column("#5", width=120)
+
+    for values in cursor.execute("""
+            SELECT lo.id_order, lo.DATA, lo.status, lo.user_id, u.log 
+            FROM list_order lo
+            JOIN user u ON lo.user_id = u.user_id
+            ORDER BY lo.id_order DESC
+        """):
+        tree.insert("", tk.END, values=values)
+
     scrollbar = ttk.Scrollbar(frame, orient=VERTICAL, command=tree.yview)
     tree.configure(yscroll=scrollbar.set)
-    scrollbar.place(x=213, y=15)
-    tk.Button(frame, text="Изменить статуса", command=lambda: izmenit_status(tree)).place(x=0, y=240, height=40, width=190)
+    scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+
+    conn.close()
+
+    btn_frame = tk.Frame(frame)
+    btn_frame.pack(pady=10, fill=tk.X)
+
+    status_btn = tk.Button(btn_frame, text="Изменить статус",
+                           command=lambda: izmenit_status(tree, orderes_window),
+                           bg="darkgrey", width=15)
+    status_btn.pack(side=tk.LEFT, padx=5)
+
+    info_btn = tk.Button(btn_frame, text="Просмотреть заказ",
+                         command=lambda: info_order(tree, orderes_window),
+                         bg="darkgrey", width=15)
+    info_btn.pack(side=tk.LEFT, padx=5)
 
 
 def add_igri(tree):
@@ -324,7 +430,6 @@ def delit_igri(tree):
     game_id = tree.item(selected[0])['values'][0]
     game_name = tree.item(selected[0])['values'][1]
 
-
     conn = sqlite3.connect('magaz.db')
     cursor = conn.cursor()
     cursor.execute("DELETE FROM Igri WHERE id = ?", (game_id,))
@@ -356,7 +461,6 @@ def corzina():
 
     conn = sqlite3.connect('magaz.db')
     cursor = conn.cursor()
-
 
     cursor.execute("""
         SELECT id_order FROM list_order 
@@ -430,9 +534,21 @@ def corzina():
         corzin_window.destroy()
         corzina()
 
+    def push_from_cart():
+        conn = sqlite3.connect('magaz.db')
+        cursor = conn.cursor()
+        cursor.execute("UPDATE list_order SET status = ? WHERE user_id = ?", ('отправлен', user_id))
+        conn.commit()
+        conn.close()
+        mb.showinfo("Отлично",
+                    "Ваш заказ оформлен и деньги списаны с вашего счета. В случии отмены вашего заказа оператор вернёт вам деньги")
+        corzin_window.destroy()
+        corzina()
+
     remove_btn = tk.Button(frame, text="Удалить из корзины", command=remove_from_cart, bg="red", fg="white")
     remove_btn.pack(pady=5)
-
+    remove_btn = tk.Button(frame, text="Оплата заказа", command=push_from_cart, bg="green", fg="white")
+    remove_btn.pack(pady=5)
     conn.close()
 
 
@@ -542,11 +658,11 @@ def avtoriz():
                 rolis.place(x=225, y=350, height=40, width=200)
                 user_info = tk.Label(main_widndow, text=f"Напоминание про роли:", font=("Arial", 16))
                 user_info.place(x=350, y=50)
-                user_info = tk.Label(main_widndow, text=f"1 - это пользователь", font=("Arial", 16), fg="red")
+                user_info = tk.Label(main_widndow, text=f"1 - это пользователь", font=("Arial", 16))
                 user_info.place(x=360, y=110)
-                user_info = tk.Label(main_widndow, text=f"2 - это сотрудник", font=("Arial", 16), fg="DarkGoldenrod1")
+                user_info = tk.Label(main_widndow, text=f"2 - это сотрудник", font=("Arial", 16))
                 user_info.place(x=360, y=160)
-                user_info = tk.Label(main_widndow, text=f"3 - это сам бог, администратор", font=("Arial", 16), fg="green")
+                user_info = tk.Label(main_widndow, text=f"3 - это сам бог, администратор", font=("Arial", 16))
                 user_info.place(x=360, y=200)
             elif vid == 2:
                 user_info = tk.Label(main_widndow, text=f"Время работать: {log}", font=("Arial", 12), fg="gray")
@@ -609,6 +725,7 @@ def avtoriz():
         except TypeError:
             mb.showerror('Ошибка',
                          'Возможно вы не авторизованны или вы не правильно ввели свой логин/пароль')
+
 
 button = ttk.Button(text="Регистрация", command=regist)
 button.place(x=30, y=200)
