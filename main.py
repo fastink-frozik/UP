@@ -273,7 +273,7 @@ def orderes():
     btn_frame.pack(pady=10, fill=tk.X)
 
     status_btn = tk.Button(btn_frame, text="Изменить статус",
-                           command=lambda: izmenit_status(tree, orderes_window),
+                           command=lambda: izmenit_status(tree),
                            bg="darkgrey", width=15)
     status_btn.pack(side=tk.LEFT, padx=5)
 
