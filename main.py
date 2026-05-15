@@ -4,15 +4,11 @@ from tkinter import ttk
 import tkinter as tk
 from tkinter import messagebox as mb
 
-id_tekushego_polzovatelya = None
-log = 2
 conn = sqlite3.connect('magaz.db')
 cursor = conn.cursor()
 root = Tk()
 root.geometry("300x300")
 root.title("Авторизация")
-cursor.execute("select vid from user")
-roli = cursor.fetchall()
 
 
 def save():
